@@ -11,35 +11,70 @@ carousel and disappears when you reload.
 Requires Python 3.9+ and a modern browser (Chrome, Edge, Firefox, or Safari).
 No packages, no build step.
 
-Give the helper a model key through the environment — the browser never sees it:
+Copy `.env.example` to `.env` and point it at a model — the browser never sees
+anything in that file. It works with **local OpenAI-compatible servers** like
+Ollama, LM Studio, or vLLM (just a URL and a model name, no key needed):
 
-```sh
-# Jev (TypeSafe System One) — typed questions, real probability answers
-export JEV_API_KEY=...            # Windows: $env:JEV_API_KEY = "..."
-
-# or any OpenAI-compatible chat model
-export OPENAI_API_KEY=...
-export OPENAI_BASE_URL=...        # optional, defaults to https://api.openai.com/v1
-export OPENAI_MODEL=...           # optional, defaults to gpt-4o-mini
-
-python server.py
+```ini
+# .env — Ollama example
+OPENAI_BASE_URL=http://localhost:11434/v1
+OPENAI_MODEL=llama3.2
+OPENAI_API_KEY=
 ```
 
-Open **http://127.0.0.1:8791**, open Studio settings, pick a representation and
-grid size, and enter a prompt. Use `python server.py --port 8795` if the default
-port is busy. Stop the helper with Ctrl+C.
+or with Jev — TypeSafe's model or **any third-party Jev-compatible model** —
+or any hosted OpenAI-compatible model:
 
-### Environment variables
+```ini
+# .env — Jev example                  # .env — hosted example
+JEV_BASE_URL=https://api.typesafe.ai/v1/systemone
+                                     OPENAI_BASE_URL=https://api.openai.com/v1
+JEV_MODEL=jev-latest                 OPENAI_MODEL=gpt-4o-mini
+                                     OPENAI_API_KEY=sk-...
+JEV_API_KEY=...
+```
+
+Both backends take the same three knobs — **key, model name, and URL** — so a
+third-party Jev/System One endpoint is just another base URL and model name:
+
+```ini
+# .env — third-party Jev-compatible model
+PAINT_PROVIDER=jev
+JEV_BASE_URL=https://jev.example.com/v1/systemone
+JEV_MODEL=my-jev-fork
+JEV_API_KEY=...                      # omit if the endpoint needs no key
+```
+
+Then run the helper and open **http://127.0.0.1:8791**:
+
+```sh
+python server.py                 # Windows: python server.py
+```
+
+Open Studio settings, pick a representation and grid size, and enter a prompt.
+Use `python server.py --port 8795` if the default port is busy, or
+`python server.py --env D:\configs\pixel.env` to load settings from elsewhere
+(`--env none` skips the file). Stop the helper with Ctrl+C.
+
+### Settings
+
+Everything can come from `.env` or from real environment variables, which
+override the file. Keys are read by the helper only and are never returned to
+the browser.
 
 | Variable | Meaning |
 | --- | --- |
-| `JEV_API_KEY` | TypeSafe API key; selects the Jev backend |
-| `JEV_MODEL`, `JEV_ENDPOINT` | Override the Jev model or endpoint |
-| `OPENAI_API_KEY` / `AI_API_KEY` | Key for any OpenAI-compatible backend |
-| `OPENAI_BASE_URL` / `AI_BASE_URL` | Alternate OpenAI-compatible base URL |
-| `OPENAI_MODEL` / `AI_MODEL` | Chat model name |
+| `OPENAI_BASE_URL` / `AI_BASE_URL` | Any OpenAI-compatible endpoint, e.g. `http://localhost:11434/v1` |
+| `OPENAI_MODEL` / `AI_MODEL` | Model name that endpoint serves |
+| `OPENAI_API_KEY` / `AI_API_KEY` | Key for that endpoint; optional for local servers |
+| `JEV_BASE_URL` / `JEV_ENDPOINT` | Any Jev/System One-compatible endpoint |
+| `JEV_MODEL` | Model name that endpoint serves, e.g. `jev-latest` |
+| `JEV_API_KEY` | Key for that endpoint; optional for endpoints without auth |
 | `PAINT_PROVIDER` | `auto` (default), `jev`, or `chat` |
 | `PORT` | Default port for the helper |
+
+With `PAINT_PROVIDER=auto`, any Jev configuration (key, URL, or model) wins;
+otherwise any OpenAI-compatible configuration selects that backend.
 
 ## How it works
 
@@ -65,9 +100,9 @@ into each pigment mix so edges stay painterly.
 
 ## Security and privacy
 
-- Model keys live only in the helper's environment. They are attached to
-  outbound model requests inside the server process and are never stored,
-  logged, or returned to the browser.
+- Model keys live only in `.env` (gitignored) or the helper's environment. They
+  are attached to outbound model requests inside the server process and are
+  never stored, logged, or returned to the browser.
 - The helper binds to `127.0.0.1`, checks the request origin, and answers with
   `no-store` and a strict content security policy. Access logging is disabled so
   prompts are never written to disk.

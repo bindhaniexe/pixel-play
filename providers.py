@@ -15,6 +15,7 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field as dc_field
+from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -272,13 +273,13 @@ def _probability_map(raw: Any, qid: str) -> dict[str, float]:
 
 
 class JevProvider:
-    """TypeSafe System One backend: typed questions, probability answers."""
+    """Typed-question backend: TypeSafe's Jev or any Jev-compatible endpoint."""
 
     name = "jev"
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str = "",
         model: str = JEV_MODEL,
         endpoint: str = JEV_ENDPOINT,
         timeout: int = HTTP_TIMEOUT,
@@ -291,6 +292,10 @@ class JevProvider:
     @property
     def model(self) -> str:
         return self._model
+
+    @property
+    def endpoint(self) -> str:
+        return self._endpoint
 
     # -- wire ---------------------------------------------------------------
 
@@ -305,12 +310,11 @@ class JevProvider:
         request = Request(
             self._endpoint,
             data=body,
-            headers={
-                "Authorization": f"Bearer {self._key}",
-                "Content-Type": "application/json",
-            },
+            headers={"Content-Type": "application/json"},
             method="POST",
         )
+        if self._key:
+            request.add_header("Authorization", f"Bearer {self._key}")
         try:
             with _open(request, timeout=self._timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
@@ -538,13 +542,13 @@ def parse_grid_json(text: str, size: int) -> tuple[list[tuple[int, int, int]], l
 
 
 class ChatProvider:
-    """Any OpenAI-compatible chat completions backend."""
+    """Any OpenAI-compatible chat completions backend, local or hosted."""
 
     name = "chat"
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str = "",
         base_url: str = "https://api.openai.com/v1",
         model: str = CHAT_MODEL,
         timeout: int = HTTP_TIMEOUT,
@@ -597,12 +601,11 @@ class ChatProvider:
         request = Request(
             self._url,
             data=json.dumps(body).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self._key}",
-                "Content-Type": "application/json",
-            },
+            headers={"Content-Type": "application/json"},
             method="POST",
         )
+        if self._key:
+            request.add_header("Authorization", f"Bearer {self._key}")
         try:
             with _open(request, timeout=self._timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
@@ -659,28 +662,94 @@ class ChatProvider:
         )
 
 
-# ------------------------------------------------------------- selection
+# ------------------------------------------------------------- configuration
+
+
+def load_env_file(path: str | os.PathLike[str], env: dict[str, str] | None = None) -> int:
+    """Load a minimal .env file into the environment. Returns keys set.
+
+    Understands `KEY=value`, `export KEY=value`, optional single or double
+    quotes, blank lines, and `#` comments. The real environment always wins
+    over the file. Keys are only placed into this process's environment.
+    """
+    target: dict[str, str] = os.environ if env is None else env
+    file = Path(path)
+    if not file.is_file():
+        return 0
+    loaded = 0
+    for line in file.read_text(encoding="utf-8-sig").splitlines():
+        text = line.strip()
+        if not text or text.startswith("#"):
+            continue
+        if text.startswith("export "):
+            text = text[7:].strip()
+        key, separator, value = text.partition("=")
+        key = key.strip()
+        if not separator or not key or " " in key:
+            continue
+        value = value.strip()
+        if value[:1] in ('"', "'"):
+            quote = value[0]
+            end = value.find(quote, 1)
+            value = value[1:end if end != -1 else None]
+        else:
+            value = value.split(" #", 1)[0].strip()
+        if key not in target:
+            target[key] = value
+            loaded += 1
+    return loaded
+
+
+def _chat_backend(key: str, base_url: str, model: str) -> ChatProvider:
+    return ChatProvider(
+        key,
+        base_url=base_url or "https://api.openai.com/v1",
+        model=model or CHAT_MODEL,
+    )
+
+
+def _jev_backend(key: str, endpoint: str, model: str) -> JevProvider:
+    return JevProvider(
+        key,
+        endpoint=endpoint or JEV_ENDPOINT,
+        model=model or JEV_MODEL,
+    )
 
 
 def provider_from_env(env: Mapping[str, str] | None = None) -> JevProvider | ChatProvider | None:
-    """Pick a backend from environment variables. Keys never leave this scope."""
-    env = os.environ if env is None else env
-    choice = env.get("PAINT_PROVIDER", "auto").strip().lower()
-    jev_key = (env.get("JEV_API_KEY") or "").strip()
-    chat_key = (env.get("OPENAI_API_KEY") or env.get("AI_API_KEY") or "").strip()
+    """Pick a backend from environment variables. Keys never leave this scope.
 
-    if choice == "jev" or (choice == "auto" and jev_key):
-        if jev_key:
-            return JevProvider(
-                jev_key,
-                model=(env.get("JEV_MODEL") or JEV_MODEL).strip(),
-                endpoint=(env.get("JEV_ENDPOINT") or JEV_ENDPOINT).strip(),
-            )
-        return None
-    if choice in ("chat", "openai", "auto") and chat_key:
-        return ChatProvider(
-            chat_key,
-            base_url=(env.get("OPENAI_BASE_URL") or env.get("AI_BASE_URL") or "https://api.openai.com/v1").strip(),
-            model=(env.get("OPENAI_MODEL") or env.get("AI_MODEL") or CHAT_MODEL).strip(),
-        )
+    Both backends take a key, a model name, and a URL, and both work without a
+    key against local or third-party endpoints that need none:
+
+    - Jev / System One compatible: JEV_BASE_URL (or JEV_ENDPOINT), JEV_MODEL,
+      JEV_API_KEY — TypeSafe's Jev or any third-party Jev-compatible model.
+    - OpenAI compatible: OPENAI_BASE_URL, OPENAI_MODEL, OPENAI_API_KEY —
+      Ollama, LM Studio, vLLM, or any hosted model.
+
+    With PAINT_PROVIDER=auto, any Jev configuration selects the Jev backend
+    first; otherwise any OpenAI-compatible configuration selects that one.
+    """
+    env = os.environ if env is None else env
+    choice = (env.get("PAINT_PROVIDER") or "auto").strip().lower() or "auto"
+
+    jev_key = (env.get("JEV_API_KEY") or "").strip()
+    jev_url = (env.get("JEV_BASE_URL") or env.get("JEV_ENDPOINT") or "").strip()
+    jev_model = (env.get("JEV_MODEL") or "").strip()
+
+    chat_key = (env.get("OPENAI_API_KEY") or env.get("AI_API_KEY") or "").strip()
+    chat_url = (env.get("OPENAI_BASE_URL") or env.get("AI_BASE_URL") or "").strip()
+    chat_model = (env.get("OPENAI_MODEL") or env.get("AI_MODEL") or "").strip()
+
+    has_jev = bool(jev_key or jev_url or jev_model)
+    has_chat = bool(chat_key or chat_url or chat_model)
+
+    if choice == "jev":
+        return _jev_backend(jev_key, jev_url, jev_model) if has_jev else None
+    if choice in ("chat", "openai"):
+        return _chat_backend(chat_key, chat_url, chat_model) if has_chat else None
+    if has_jev:
+        return _jev_backend(jev_key, jev_url, jev_model)
+    if has_chat:
+        return _chat_backend(chat_key, chat_url, chat_model)
     return None

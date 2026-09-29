@@ -17,9 +17,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from providers import GRID_SIZES, REPRESENTATIONS, ProviderError, provider_from_env
+from providers import GRID_SIZES, REPRESENTATIONS, ProviderError, load_env_file, provider_from_env
 
 WEB = Path(__file__).resolve().parent / "web"
+ENV_FILE = Path(__file__).resolve().parent / ".env"
 MAX_BODY = 16_384
 MAX_PROMPT = 2_000
 
@@ -184,7 +185,18 @@ def main() -> None:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Windows consoles may be cp1252.
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8791")))
+    parser.add_argument(
+        "--env",
+        default=str(ENV_FILE),
+        help="path to a .env file with model settings (default: .env beside server.py)",
+    )
     args = parser.parse_args()
+
+    env_path = Path(args.env)
+    if env_path.name.lower() != "none":
+        loaded = load_env_file(env_path)
+        if loaded:
+            print(f"Loaded {loaded} setting(s) from {env_path}", flush=True)
 
     provider = provider_from_env()
     if provider is None:

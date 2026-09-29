@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -250,6 +251,102 @@ class SelectionTests(unittest.TestCase):
         provider = P.provider_from_env({"JEV_API_KEY": "sk-secret"})
         self.assertNotIn("sk-secret", repr(provider))
         self.assertNotIn("sk-secret", repr(P.provider_from_env({"AI_API_KEY": "sk-secret"})))
+
+
+class EnvFileTests(unittest.TestCase):
+    def test_load_env_file_parses_common_forms(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / ".env"
+            path.write_text(
+                "# comment\n"
+                "\n"
+                "export OPENAI_MODEL='llama3.2'\n"
+                "OPENAI_BASE_URL=http://localhost:11434/v1 # local\n"
+                'JEV_MODEL="jev-latest"\n'
+                "EMPTY=\n"
+                "NOT AN ASSIGNMENT\n",
+                encoding="utf-8",
+            )
+            env: dict[str, str] = {"OPENAI_MODEL": "shell-wins"}
+            loaded = P.load_env_file(path, env)
+            self.assertEqual(env["OPENAI_MODEL"], "shell-wins")  # real env wins
+            self.assertEqual(env["OPENAI_BASE_URL"], "http://localhost:11434/v1")
+            self.assertEqual(env["JEV_MODEL"], "jev-latest")
+            self.assertEqual(env["EMPTY"], "")
+            self.assertNotIn("NOT AN ASSIGNMENT", env)
+            self.assertEqual(loaded, 3)
+
+    def test_missing_file_is_ignored(self) -> None:
+        env: dict[str, str] = {}
+        self.assertEqual(P.load_env_file(Path("no-such-file.env"), env), 0)
+        self.assertEqual(env, {})
+    def test_custom_endpoint_and_model(self) -> None:
+        provider = P.provider_from_env(
+            {
+                "JEV_BASE_URL": "http://localhost:9000/v1/systemone",
+                "JEV_MODEL": "jev-mini-3p",
+            }
+        )
+        self.assertIsInstance(provider, P.JevProvider)
+        self.assertEqual(provider.model, "jev-mini-3p")
+        self.assertEqual(provider.endpoint, "http://localhost:9000/v1/systemone")
+
+    def test_endpoint_alias_and_auto_precedence(self) -> None:
+        alias = P.provider_from_env({"JEV_ENDPOINT": "http://localhost:9000/v2"})
+        self.assertEqual(alias.endpoint, "http://localhost:9000/v2")
+        both = P.provider_from_env(
+            {"JEV_MODEL": "jev-mini-3p", "OPENAI_API_KEY": "sk-secret"}
+        )
+        self.assertIsInstance(both, P.JevProvider)
+        chat_only = P.provider_from_env(
+            {"PAINT_PROVIDER": "chat", "JEV_MODEL": "jev-mini-3p", "OPENAI_API_KEY": "sk-secret"}
+        )
+        self.assertIsInstance(chat_only, P.ChatProvider)
+
+    def test_keyless_jev_sends_no_authorization(self) -> None:
+        captured: dict[str, object] = {}
+
+        def opener(request: Request, timeout: int | None = None) -> FakeStream:
+            captured["auth"] = request.get_header("Authorization")
+            body = json.loads(request.data.decode("utf-8"))
+            captured["model"] = body["model"]
+            answers = {
+                qid: {"probabilities": uniform(q["criteria"])}
+                for qid, q in body["questions"].items()
+            }
+            return FakeStream(json.dumps({"answers": answers}).encode("utf-8"))
+
+        provider = P.provider_from_env(
+            {"JEV_BASE_URL": "http://localhost:9000/v1/systemone", "JEV_MODEL": "jev-mini-3p"}
+        )
+        with patch.object(P, "_open", opener):
+            field = provider.generate("a lighthouse", "palette", 8)
+        self.assertIsNone(captured["auth"])
+        self.assertEqual(captured["model"], "jev-mini-3p")
+        self.assertEqual(len(field["cells"]), 64)
+
+    def test_keyed_third_party_jev_still_sends_bearer(self) -> None:
+        captured: dict[str, object] = {}
+
+        def opener(request: Request, timeout: int | None = None) -> FakeStream:
+            captured["auth"] = request.get_header("Authorization")
+            body = json.loads(request.data.decode("utf-8"))
+            answers = {
+                qid: {"probabilities": uniform(q["criteria"])}
+                for qid, q in body["questions"].items()
+            }
+            return FakeStream(json.dumps({"answers": answers}).encode("utf-8"))
+
+        provider = P.provider_from_env(
+            {
+                "JEV_BASE_URL": "http://localhost:9000/v1/systemone",
+                "JEV_MODEL": "jev-mini-3p",
+                "JEV_API_KEY": "sk-secret",
+            }
+        )
+        with patch.object(P, "_open", opener):
+            provider.generate("a lighthouse", "silhouette", 8)
+        self.assertEqual(captured["auth"], "Bearer sk-secret")
 
 
 if __name__ == "__main__":
