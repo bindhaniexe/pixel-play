@@ -1,0 +1,10 @@
+{
+  "name": "pixel-play",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Turn model pigment probabilities into paintings.",
+  "scripts": {
+    "test": "node --test tests/painter.test.mjs"
+  }
+}

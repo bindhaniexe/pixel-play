@@ -1,0 +1,287 @@
+/* Pixel Play studio styling: warm paper, framed canvases, quiet controls. */
+
+:root {
+  color-scheme: light;
+  --ink: #29272d;
+  --paper: #eeece7;
+  --card: #fffefa;
+  --muted: #857b8e;
+  --accent: #9c85c5;
+  --danger: #a43f3f;
+  --serif: Georgia, "Times New Roman", serif;
+  --sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  color: var(--ink);
+  background: radial-gradient(ellipse at 28% 5%, #faf9f6, #efede8 55%, #e6e3dd);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* ---- settings panel ---- */
+
+.toggle {
+  position: fixed;
+  top: 18px;
+  left: 18px;
+  z-index: 30;
+  font-size: 21px;
+  color: #62596b;
+}
+
+aside {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: 300px;
+  max-width: 86vw;
+  padding: 22px 24px;
+  background: #faf9f7;
+  border-right: 1px solid #e3dfe6;
+  box-shadow: 14px 0 50px #30233b0a;
+  z-index: 20;
+  overflow-y: auto;
+}
+
+aside[hidden] {
+  display: none;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 550;
+}
+
+.icon-button {
+  font-size: 23px;
+  line-height: 1;
+  color: #62596b;
+}
+
+aside label {
+  display: block;
+  margin: 18px 0 6px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #665f50;
+}
+
+aside select {
+  width: 100%;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #dedbe2;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.hint {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: #898493;
+}
+
+/* ---- gallery ---- */
+
+main {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 46px 20px 26px;
+}
+
+#carousel {
+  width: min(600px, 92vw);
+}
+
+#track {
+  display: flex;
+  transition: transform 0.45s ease;
+}
+
+.frame {
+  flex: 0 0 100%;
+  margin: 0 auto;
+  width: min(560px, 88vw);
+  aspect-ratio: 1;
+  padding: 14px;
+  background: var(--card);
+  border-radius: 6px;
+  box-shadow:
+    0 1px 2px #352b2214,
+    12px 17px 20px #352b2223,
+    25px 32px 48px #352b2215;
+}
+
+.frame canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  opacity: 0;
+  animation: reveal 0.55s ease forwards;
+}
+
+@keyframes reveal {
+  to {
+    opacity: 1;
+  }
+}
+
+.canvas-rim {
+  height: 100%;
+  border-radius: 3px;
+  background-color: #f6f2ea;
+  background-image:
+    repeating-linear-gradient(0deg, #ffffff0a 0 1px, #21190d06 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, #ffffff08 0 1px, transparent 1px 3px);
+  box-shadow:
+    inset 1px 1px 1px #ffffff60,
+    inset -1px -1px 2px #21190d25;
+}
+
+.frame:not(.empty) .canvas-rim {
+  display: none;
+}
+
+#navigation {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+#navigation[hidden] {
+  display: none;
+}
+
+#navigation button {
+  font-size: 18px;
+  color: #62596b;
+}
+
+/* ---- composer ---- */
+
+.composer {
+  width: min(560px, 88vw);
+}
+
+.prompt-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #fffdf8;
+  border: 1px solid #51493925;
+  border-radius: 12px;
+  transition: border-color 0.2s;
+}
+
+.prompt-bar:focus-within {
+  border-color: #51493970;
+}
+
+.prompt-bar textarea {
+  flex: 1;
+  resize: none;
+  border: 0;
+  background: transparent;
+  color: #3e3b33;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-style: italic;
+}
+
+.prompt-bar textarea:focus {
+  outline: none;
+}
+
+.prompt-bar textarea::placeholder {
+  color: #898477;
+}
+
+#paint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 2px;
+  color: #665f50;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: color 0.2s;
+}
+
+#paint:hover:not(:disabled) {
+  color: #24221d;
+}
+
+#paint:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+#paint svg {
+  width: 17px;
+  height: 17px;
+}
+
+#status {
+  min-height: 18px;
+  margin: 9px 4px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+#status.error {
+  color: var(--danger);
+}
